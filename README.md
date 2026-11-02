@@ -1,5 +1,47 @@
 # 🚀 Cloud-Native GitOps Application Lifecycle Pipeline
 
+```mermaid
+graph TD
+    %% Define Styles
+    classDef dev fill:#4f46e5,stroke:#312e81,stroke-width:2px,color:#fff;
+    classDef ci fill:#059669,stroke:#065f46,stroke-width:2px,color:#fff;
+    classDef registry fill:#db2777,stroke:#9d174d,stroke-width:2px,color:#fff;
+    classDef cd fill:#ea580c,stroke:#9a3412,stroke-width:2px,color:#fff;
+    classDef k8s fill:#2563eb,stroke:#1e3a8a,stroke-width:2px,color:#fff;
+    classDef public fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#fff;
+
+    %% Workflow Nodes
+    DevApp[Go Web App & Dockerfile] -->|Git Push| GitHub[GitHub Main Repository]
+    
+    subgraph GitHub Actions CI Pipeline
+        GitHub -->|Triggers Workflow| GHRunner[GitHub Runner]
+        GHRunner -->|Multi-Stage Build| DockBuild[Compile Docker Image]
+        DockBuild -->|Authenticate & Push| GHCR[(GitHub Container Registry)]
+    end
+
+    subgraph Local Kubernetes Cluster Engine Minikube
+        ArgoCD[Argo CD Controller] -->|Polls Manifest State| GitHub
+        ArgoCD -->|Pulls Image| GHCR
+        
+        ArgoCD -->|Continuous Reconciliation| K8sDeploy[K8s Deployment Replicas x2]
+        ArgoCD -->|Internal Load Balancing| K8sSvc[K8s NodePort Service]
+    end
+
+    subgraph Edge Routing & Access Validation
+        K8sSvc -->|Tunneling Port 34219| Ngrok[ngrok Reverse Proxy]
+        Ngrok -->|Public Ingress HTTPS| Friend[Public Internet Mobile/Browser]
+    end
+
+    %% Apply Styles
+    class DevApp,GitHub dev;
+    class GHRunner,DockBuild ci;
+    class GHCR registry;
+    class ArgoCD cd;
+    class K8sDeploy,K8sSvc k8s;
+    class Ngrok,Friend public;
+```
+
+
 An enterprise-grade, fully automated GitOps Continuous Integration (CI) and Continuous Delivery (CD) pipeline deploying a high-availability Go web microservice into a local Kubernetes environment.
 
 ---
