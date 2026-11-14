@@ -1,6 +1,6 @@
 # Cloud-Native DevSecOps & GitOps Microservice Pipeline
 
-![Build, Scan, and GitOps Release](https://github.com)
+![Build, Scan, and GitOps Release](https://github.com/Veeresh-Shetter/gitops-app/actions/workflows/ci.yml/badge.svg)
 
 An end-to-end, production-hardened CI/CD and GitOps pipeline deploying a lightweight Go microservice to Kubernetes using **Docker, GitHub Actions, Trivy, GHCR, and Argo CD**.
 
