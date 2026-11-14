@@ -19,7 +19,7 @@ spec:
         runAsUser: 100
       containers:
         - name: gitops-app-container
-          image: ghcr.io/veeresh-shetter/gitops-app:sha-initial
+          image: ghcr.io/veeresh-shetter/gitops-app:sha-efcdd20
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
