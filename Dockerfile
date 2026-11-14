@@ -1,5 +1,5 @@
 # --- Stage 1: Build the hardened static binary ---
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 COPY go.mod main.go ./
@@ -8,7 +8,7 @@ COPY go.mod main.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o main .
 
 # --- Stage 2: Create minimal non-root runtime image ---
-FROM alpine:3.20
+FROM alpine:3.21
 
 # Create a dedicated non-root user and group
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
