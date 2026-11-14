@@ -1,106 +1,44 @@
-# 🚀 Cloud-Native GitOps Application Lifecycle Pipeline
+# Cloud-Native DevSecOps & GitOps Microservice Pipeline
+
+An end-to-end, production-hardened CI/CD and GitOps pipeline deploying a lightweight Go microservice to Kubernetes using **Docker, GitHub Actions, Trivy, GHCR, and Argo CD**.
+
+## Architecture & Workflow
 
 ```mermaid
-graph TD
-    %% Define Styles
-    classDef dev fill:#4f46e5,stroke:#312e81,stroke-width:2px,color:#fff;
-    classDef ci fill:#059669,stroke:#065f46,stroke-width:2px,color:#fff;
-    classDef registry fill:#db2777,stroke:#9d174d,stroke-width:2px,color:#fff;
-    classDef cd fill:#ea580c,stroke:#9a3412,stroke-width:2px,color:#fff;
-    classDef k8s fill:#2563eb,stroke:#1e3a8a,stroke-width:2px,color:#fff;
-    classDef public fill:#7c3aed,stroke:#5b21b6,stroke-width:2px,color:#fff;
-
-    %% Workflow Nodes
-    DevApp[Go Web App & Dockerfile] -->|Git Push| GitHub[GitHub Main Repository]
-    
-    subgraph GitHub Actions CI Pipeline
-        GitHub -->|Triggers Workflow| GHRunner[GitHub Runner]
-        GHRunner -->|Multi-Stage Build| DockBuild[Compile Docker Image]
-        DockBuild -->|Authenticate & Push| GHCR[(GitHub Container Registry)]
-    end
-
-    subgraph Local Kubernetes Cluster Engine Minikube
-        ArgoCD[Argo CD Controller] -->|Polls Manifest State| GitHub
-        ArgoCD -->|Pulls Image| GHCR
-        
-        ArgoCD -->|Continuous Reconciliation| K8sDeploy[K8s Deployment Replicas x2]
-        ArgoCD -->|Internal Load Balancing| K8sSvc[K8s NodePort Service]
-    end
-
-    subgraph Edge Routing & Access Validation
-        K8sSvc -->|Tunneling Port 34219| Ngrok[ngrok Reverse Proxy]
-        Ngrok -->|Public Ingress HTTPS| Friend[Public Internet Mobile/Browser]
-    end
-
-    %% Apply Styles
-    class DevApp,GitHub dev;
-    class GHRunner,DockBuild ci;
-    class GHCR registry;
-    class ArgoCD cd;
-    class K8sDeploy,K8sSvc k8s;
-    class Ngrok,Friend public;
+flowchart LR
+    Dev[Developer Push] -->|Triggers CI| GHA[GitHub Actions]
+    GHA -->|Multi-Stage Build| Docker[Non-Root Alpine Image]
+    Docker -->|CVE Scan| Trivy{Trivy Security Gate}
+    Trivy -->|Pass: 0 High/Crit| GHCR[(GitHub Container Registry)]
+    GHA -->|Auto-Bump SHA Tag| GitRepo[(GitOps Manifests k8s/)]
+    ArgoCD[Argo CD Controller] -->|Polls & Syncs| GitRepo
+    ArgoCD -->|Reconciles State| K8s[Kubernetes Cluster]
 ```
 
+## Key Engineering & Security Highlights
 
-An enterprise-grade, fully automated GitOps Continuous Integration (CI) and Continuous Delivery (CD) pipeline deploying a high-availability Go web microservice into a local Kubernetes environment.
+* **Hardened Multi-Stage Containerization:** Compiled a static Go binary (`CGO_ENABLED=0`, stripped debug symbols with `-ldflags="-s -w"`) inside a minimal `alpine:3.20` runtime running under a dedicated non-root user (`appuser`, UID `100`), shrinking the image footprint to **~12 MB** and eliminating root privilege escalation risks.
+* **Shift-Left DevSecOps Gate:** Integrated **Aquasecurity Trivy** directly into GitHub Actions to scan every built container image for OS and library vulnerabilities, blocking pushes if any `CRITICAL` or `HIGH` CVEs are detected.
+* **True Pull-Based GitOps:** Separated application source code from Kubernetes manifests (`k8s/`). Upon passing security checks, CI pushes an immutable `sha-<commit>` image tag to GHCR and commits the updated tag back to `k8s/deployment.yaml` with `[skip ci]`, allowing **Argo CD** to detect drift and reconcile cluster state automatically.
+* **Production Kubernetes Resilience:** Configured explicit CPU/memory requests and limits alongside HTTP `/healthz` `readinessProbe` and `livenessProbe` checks to enable zero-downtime rolling updates.
 
----
+## Repository Structure
 
-## 🏗️ Architecture & Tools Breakdown
+```text
+├── .github/workflows/ci.yml   # Build, Trivy CVE scan, GHCR push & GitOps tag bump
+├── k8s/
+│   ├── deployment.yaml        # Non-root pod security context, probes & resource limits
+│   └── service.yaml           # ClusterIP / NodePort service routing on port 8080
+├── Dockerfile                 # Multi-stage non-root Alpine container build
+└── main.go                    # Lightweight Go HTTP microservice with /healthz endpoint
+```
 
-*   **Application Backend:** High-performance HTTP web server using **Go (Golang)** featuring active endpoint logging and standardized `/healthz` liveness probes.
-*   **Containerization:** Multi-stage **Docker** build optimized for minimal production footprint and quick container layer caching.
-*   **Continuous Integration (CI):** Formulated a **GitHub Actions** orchestration pipeline triggering on code updates to dynamically build, tag, and publish application containers directly to the **GitHub Container Registry (GHCR)**.
-*   **Orchestration & Infrastructure:** Configured declarative **Kubernetes** manifest layouts (`deployment.yaml`, `service.yaml`) running multiple decoupled app replicas behind an internal network load balancer via **Minikube**.
-*   **Continuous Delivery (CD):** Implemented **Argo CD** to manage automated target state synchronization, declarative drift self-healing, and structural resource pruning following strict GitOps design principles.
+## Quick Local Verification
 
----
-
-## 🛠️ Step-by-Step Implementation Guide
-
-### 📂 Phase 1: Application & Container Setup
-1. **Develop the Go Microservice:** Create a `main.go` file establishing the web routes, logging middleware, and target port `8080`.
-2. **Write the Multi-Stage Dockerfile:** Create a file named `Dockerfile` to handle the isolated compilation block and light Alpine runner image.
-3. **Local Testing:** Build and run the container locally to verify functionality:
+1. **Point Argo CD to `k8s/`:** Configure your Argo CD Application manifest path to `k8s` with automated sync and self-healing enabled.
+2. **Verify Pod Health & Non-Root Execution:**
    ```bash
-   docker build -t gitops-app:local .
-   docker run -d -p 8080:8080 gitops-app:local
+   kubectl get pods -l app=gitops-app
+   kubectl exec -it deploy/gitops-app-deployment -- whoami
+   # Expected output: appuser
    ```
-
-### 🤖 Phase 2: Automated CI Setup (GitHub Actions)
-1. **Establish the Workflow Path:** Create the rigid hidden folder structure that GitHub requires for automation scanning:
-   ```bash
-   mkdir -p .github/workflows
-   ```
-2. **Create the CI Configuration:** Create a file inside that directory named `ci.yml`.
-3. **Configure the Automation Script:** Write the job definitions specifying the `ghcr.io` login rules, short SHA version tagging, and push conditions (`on: push: branches: [main]`).
-4. **Generate Access Token:** Go to GitHub Developer Settings, create a Personal Access Token (PAT) with `repo` and `workflow` permissions.
-5. **Push Code to Remote:** Initialize Git, authenticate using the token, and push files to trigger the remote automation virtual runner.
-
-### ☸️ Phase 3: Infrastructure Setup (Kubernetes)
-1. **Spin Up the Cluster:** Boot your local production-grade single-node cluster environment:
-   ```bash
-   minikube start --driver=docker
-   ```
-2. **Author the Manifests:** Use terminal output strings to compose your declarative deployment configurations:
-   * `deployment.yaml`: Defines target state, `imagePullPolicy: Always`, and 2 matching replicas.
-   * `service.yaml`: Provisions internal network routing utilizing a static `NodePort (30080)`.
-3. **Apply to Cluster Engine:** Instruct `kubectl` to deploy the resources:
-   ```bash
-   kubectl apply -f deployment.yaml
-   kubectl apply -f service.yaml
-   ```
-
-### 🐙 Phase 4: GitOps Git Delivery Setup (Argo CD)
-1. **Create the Isolated Namespace:** Set up a dedicated virtual room inside the cluster:
-   ```bash
-   kubectl create namespace argocd
-   ```
-2. **Deploy Argo CD Infrastructure:** Run the official resource manifests using a decoded base64 stream to establish the background controller pods.
-3. **Retrieve Default Password:** Access the automatically generated secret layer using terminal decryption:
-   ```bash
-   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo ""
-   ```
-4. **Establish Dashboard Bridge:** Start port-forward networking to expose the dashboard on `localhost:8080`.
-5. **Connect Git Repository:** Open the UI, click **New App**, and fill out the mapping form targeting your repository link, set the sync policy to **Automatic**, and select `self-heal` capabilities.
-6. **Expose Globally:** Boot an edge-routing reverse proxy tunnel engine (`ngrok http 34219`) to securely expose the running cluster application to external public internet networks.
