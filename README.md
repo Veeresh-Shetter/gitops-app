@@ -52,3 +52,18 @@ flowchart LR
    kubectl exec -it deploy/gitops-app-deployment -- whoami
    # Expected output: appuser
    ```
+
+---
+
+## Container Hardening Design Decision (Alpine vs. Distroless)
+
+* **Why Non-Root Alpine + Trivy Gate:** Built a multi-stage Go binary running on a minimal `alpine` runtime under a dedicated non-root user (`appuser`, UID `100`), gated by a strict Trivy `CRITICAL`/`HIGH` vulnerability scan in GitHub Actions.
+* **Trade-off vs. Distroless:** While `distroless` eliminates shell binaries for the smallest possible attack surface, `alpine` retains lightweight troubleshooting utilities (`sh`, `wget`/`curl`, `ca-certificates`) for rapid incident debugging while maintaining a ~12 MB image footprint and zero unpatched high-severity CVEs.
+
+---
+
+## Related DevOps Portfolio Projects
+
+1. **[End-to-End Secure GitOps CI/CD Pipeline (`gitops-app`)](https://github.com/Veeresh-Shetter/gitops-app)** *(This Repository)* — Hardened non-root Go microservice, Trivy CVE scan gate, GHCR, and Argo CD automated sync.
+2. **[Production AWS EKS Infrastructure with Terraform & FinOps (`aws-eks-terraform-iac`)](https://github.com/Veeresh-Shetter/aws-eks-terraform-iac)** — Modular Multi-AZ VPC, private Amazon EKS v1.31 cluster, Checkov IaC security CI, and Lambda cost-optimization auto-scaler.
+3. **[Kubernetes Observability Stack (`k8s-prometheus-grafana-observability`)](https://github.com/Veeresh-Shetter/k8s-prometheus-grafana-observability)** — Helm-based Prometheus, Grafana, and Alertmanager monitoring with custom PromQL alerts.
